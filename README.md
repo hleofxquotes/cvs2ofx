@@ -1,2 +1,2 @@
-# cvs2ofx
-cvs2ofx
+# ofxlist
+ofxlist
