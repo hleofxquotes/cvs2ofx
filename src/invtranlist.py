@@ -13,6 +13,8 @@ from ofxtools import models
 from ofxtools.header import make_header
 from ofxtools.utils import UTC
 
+DEFAULT_OFX_VERSION = 202
+
 DEFAULT_BROKER_ID = "123456789"
 
 DEFAULT_CURRENCY = "USD"
@@ -269,6 +271,7 @@ def create_transactions(data_csv_rows, date_string_format):
     dtstart = None
     dtend = None
 
+    txns = {}
     transactions = []
     for rows in data_csv_rows:
         txn = InvestmentTransaction(
@@ -290,9 +293,77 @@ def create_transactions(data_csv_rows, date_string_format):
         dtstart = min(dtstart, trade_date)
         dtend = max(dtend, trade_date)
 
+        if not txn.symbol in txns:
+            txns[txn.symbol] = txn
+
         transactions.append(txn.ofx())
 
-    return [transactions, dtstart, dtend]
+    secinfo = []
+    for symbol in txns:
+        tnx = txns[symbol]
+        match tnx.txn_type:
+            case "BUYSTOCK":
+                secinfo.append(
+                    models.STOCKINFO(
+                        secinfo=models.SECINFO(
+                            secid=models.SECID(
+                                uniqueid=tnx.symbol, uniqueidtype=DEFAULT_UNIQUE_ID_TYPE
+                            ),
+                            secname=tnx.symbol,
+                            ticker=tnx.symbol,
+                            # fiid="1024",
+                        ),
+                        # yld=Decimal("10"),
+                        # assetclass="SMALLSTOCK",
+                    )
+                )
+            case "SELLSTOCK":
+                secinfo.append(
+                    models.STOCKINFO(
+                        secinfo=models.SECINFO(
+                            secid=models.SECID(
+                                uniqueid=tnx.symbol, uniqueidtype=DEFAULT_UNIQUE_ID_TYPE
+                            ),
+                            secname=tnx.symbol,
+                            ticker=tnx.symbol,
+                            # fiid="1024",
+                        ),
+                        # yld=Decimal("10"),
+                        # assetclass="SMALLSTOCK",
+                    )
+                )
+            case "BUYMF":
+                secinfo.append(
+                    models.MFINFO(
+                        secinfo=models.SECINFO(
+                            secid=models.SECID(
+                                uniqueid=tnx.symbol, uniqueidtype=DEFAULT_UNIQUE_ID_TYPE
+                            ),
+                            secname=tnx.symbol,
+                            ticker=tnx.symbol,
+                            # fiid="1024",
+                        ),
+                        # yld=Decimal("10"),
+                        # assetclass="SMALLSTOCK",
+                    )
+                )
+            case "SELLMF":
+                secinfo.append(
+                    models.MFINFO(
+                        secinfo=models.SECINFO(
+                            secid=models.SECID(
+                                uniqueid=tnx.symbol, uniqueidtype=DEFAULT_UNIQUE_ID_TYPE
+                            ),
+                            secname=tnx.symbol,
+                            ticker=tnx.symbol,
+                            # fiid="1024",
+                        ),
+                        # yld=Decimal("10"),
+                        # assetclass="SMALLSTOCK",
+                    )
+                )
+
+    return [transactions, secinfo, dtstart, dtend]
 
 
 # 2.5.1.6 Signon Response <SONRS>
@@ -329,6 +400,7 @@ class InvestmentAccount:
 def create_ofx_object(
     trnuid,
     transactions,
+    secinfo,
     dtstart,
     dtend,
     dtasof,
@@ -354,6 +426,9 @@ def create_ofx_object(
         invacctfrom=InvestmentAccount(brokerid, acctid).ofx(),
         invtranlist=invtranlist,
     )
+
+    seclistmsgsrsv1 = models.SECLISTMSGSRSV1(models.SECLIST(*secinfo))
+
     ofx = models.OFX(
         signonmsgsrsv1=SIGNONMSGSRSV1,
         invstmtmsgsrsv1=models.INVSTMTMSGSRSV1(
@@ -367,16 +442,18 @@ def create_ofx_object(
                 invstmtrs=invstmtrs,
             )
         ),
+        seclistmsgsrsv1=seclistmsgsrsv1,
     )
     return ofx
 
 
-def create_ofx_string(ofx):
+def create_ofx_string(ofx, pretty_print):
     root = ofx.to_etree()
     message = ET.tostring(root).decode()
-    header = str(make_header(version=220))
+    header = str(make_header(version=DEFAULT_OFX_VERSION))
     response = header + message
-    response = xml.dom.minidom.parseString(response).toprettyxml(indent="  ")
+    if pretty_print:
+        response = xml.dom.minidom.parseString(response).toprettyxml(indent="  ")
     return response
 
 
@@ -389,7 +466,7 @@ def main(args):
     # that no transactions are missed, datetime
     # dtend = datetime(2023, 1, 31, 21, 25, 32, tzinfo=UTC)
 
-    [transactions, dtstart, dtend] = create_transactions(
+    [transactions, secinfo, dtstart, dtend] = create_transactions(
         create_data_csv_rows_from_file(args.input), args.date_string_format
     )
 
@@ -412,10 +489,12 @@ def main(args):
 
     acctid = args.acctid
 
+    pretty_print = args.pretty_print
+
     ofx = create_ofx_object(
-        trnuid, transactions, dtstart, dtend, dtasof, brokerid, acctid
+        trnuid, transactions, secinfo, dtstart, dtend, dtasof, brokerid, acctid
     )
-    response = create_ofx_string(ofx)
+    response = create_ofx_string(ofx, pretty_print)
     with open(args.output, "w") as f:
         print("# Writing output to file=%s" % args.output)
         print(response, file=f)
@@ -446,6 +525,13 @@ if __name__ == "__main__":
         "-a",
         required=True,
         help="Account number at FI, A-22",
+    )
+    parser.add_argument(
+        "--pretty_print",
+        "-p",
+        default=False,
+        action="store_true",
+        help="Pretty print the output",
     )
     args = parser.parse_args()
     main(args)
