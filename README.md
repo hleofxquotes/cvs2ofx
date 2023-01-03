@@ -48,16 +48,25 @@ $ python src/invtranlist.py --input data/example1.csv --output example1.ofx --ac
 $ cat data/example1.csv 
 txn_type,trade_date,symbol,units,unitprice,total
 BUYSTOCK,2022/08/25,TSLA,100.00,50.00,-5000.00
-SELLSTOCK,2022/07/12,AAPL,10.00,129.93,1299.30
+SELLSTOCK,2022/07/12,AAPL,-10.00,129.93,1299.30
 BUYMF,2022/06/11,VTI,35.00,191.19,-6691.65
-SELLMF,2022/05/08,VOO,12.00,351.34,4216.08
+SELLMF,2022/05/08,VOO,-12.00,351.34,4216.08
 ```
 
 Four transactions
 
-* Buy TSLA (stock) on 2022/08/25 (100.00 * $50) for a total -$500.00 (notes that a buy transaction resulted in NEGATIVE total)
-* Sell AAPL (stock) on 2022/07/12 (10.00 * $129.93) for a total 1299.30 (notes that a sell transaction resulted in POSITIVE total)
-* Buy VTI (mutual fund) on 2022/06/11 (35.00 * $191.19) for a total -$6691.65 (notes that a buy transaction resulted in NEGATIVE total)
-* Buy VOO (mutual fund) on 2022/05/08 (12.00 * $351.34) for a total 4216.08 (notes that a sell transaction resulted in POSITIVE total)
+* Buy TSLA (stock) on 2022/08/25 (100.00 * $50) for a total -$500.00 
+  - notes that a **buy** transaction resulted in NEGATIVE **total**
+  - and a POSITIVE **units**
+* Sell AAPL (stock) on 2022/07/12 (-10.00 * $129.93) for a total 1299.30
+  - notes that a **sell** transaction resulted in POSITIVE **total**
+  - and a NEGATIVE **units**
+* Buy VTI (mutual fund) on 2022/06/11 (35.00 * $191.19) for a total -$6691.65
+  - notes that a **buy** transaction resulted in NEGATIVE **total**
+  - and a POSITIVE **units**
+* Sell VOO (mutual fund) on 2022/05/08 (-12.00 * $351.34) for a total 4216.08
+  - notes that a **sell** transaction resulted in POSITIVE **total**
+  - and a NEGATIVE **units**
+
 
 
