@@ -1,10 +1,13 @@
 import argparse
 import csv
+import hashlib
+import json
 import uuid
 import xml.dom.minidom
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from decimal import Decimal
+from typing import Dict, Any
 
 import pytz as pytz
 
@@ -267,23 +270,47 @@ def convert_to_datetime(date_string, date_string_format="%Y/%m/%d"):
     return datetime(d.year, d.month, d.day, tzinfo=UTC)
 
 
+def dict_hash(dictionary: Dict[str, Any]) -> str:
+    """MD5 hash of a dictionary."""
+    dhash = hashlib.md5()
+    # We need to sort arguments so {'a': 1, 'b': 2} is
+    # the same as {'b': 2, 'a': 1}
+    encoded = json.dumps(dictionary, sort_keys=True).encode()
+    dhash.update(encoded)
+    return dhash.hexdigest()
+
+
+def create_fitid(cols, row_number, fitids):
+    fitid = dict_hash(cols)
+    if fitid in fitids:
+        fitid = fitid + "_" + row_number
+
+    fitids.add(fitid)
+
+    return fitid
+
+
 def create_transactions(data_csv_rows, date_string_format):
     dtstart = None
     dtend = None
 
+    row_number = 0
     txns = {}
     transactions = []
-    for rows in data_csv_rows:
+    fitids = set()
+    for cols in data_csv_rows:
+        row_number = row_number + 1
         txn = InvestmentTransaction(
-            txn_type=rows["txn_type"],
-            trade_date=convert_to_datetime(rows["trade_date"], date_string_format),
-            symbol=rows["symbol"],
-            units=Decimal(rows["units"]),
-            unitprice=Decimal(rows["unitprice"]),
+            txn_type=cols["txn_type"],
+            trade_date=convert_to_datetime(cols["trade_date"], date_string_format),
+            symbol=cols["symbol"],
+            units=Decimal(cols["units"]),
+            unitprice=Decimal(cols["unitprice"]),
             # BUY total is NEGATIVE
             # SELL total is POSITIVE
-            total=Decimal(rows["total"]),
+            total=Decimal(cols["total"]),
         )
+        txn.fitid = create_fitid(cols, row_number, fitids)
 
         trade_date = txn.trade_date
         if dtstart is None:
