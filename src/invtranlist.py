@@ -24,6 +24,12 @@ DEFAULT_CURRENCY = "USD"
 
 
 def create_data_csv_rows_from_file(filename):
+    """
+    Parse CSV filename and return a list of rows (each is dictionary of column's values)
+
+    :param filename:
+    :return:
+    """
     data_csv_rows = []
     with open(filename, "r") as file:
         csv_file = csv.DictReader(file)
@@ -32,65 +38,6 @@ def create_data_csv_rows_from_file(filename):
             data_csv_rows.append(dict(row))
     return data_csv_rows
 
-
-# def create_data_csv_rows_hard_code():
-#     data_csv_rows = []
-#     data_csv_rows.append(
-#         {
-#             "txn_type": "BUYSTOCK",
-#             # datetime(2022, 8, 25, tzinfo=UTC),
-#             # datetime.strptime("2020-01-01 14:00", "%Y-%m-%d %H:%M")
-#             "trade_date": "2022/08/25",
-#             "symbol": "TSLA",
-#             "units": "100",
-#             "unitprice": "50.00",
-#             # BUY total is NEGATIVE
-#             # SELL total is POSITIVE
-#             "total": "-5000.00",
-#         },
-#     )
-#     data_csv_rows.append(
-#         {
-#             "txn_type": "SELLSTOCK",
-#             # datetime(2022, 7, 12, tzinfo=UTC),
-#             "trade_date": "2022/07/12",
-#             "symbol": "AAPL",
-#             "units": "10",
-#             "unitprice": "129.93",
-#             # SELL total is POSITIVE
-#             "total": "1299.30",
-#         },
-#     )
-#     data_csv_rows.append(
-#         {
-#             "txn_type": "BUYMF",
-#             # datetime(2022, 6, 11, tzinfo=UTC),
-#             "trade_date": "2022/06/11",
-#             "symbol": "VTI",
-#             "units": "35.00",
-#             "unitprice": "191.19",
-#             # BUY total is NEGATIVE
-#             "total": "-6691.65",
-#         },
-#     )
-#     data_csv_rows.append(
-#         {
-#             "txn_type": "SELLMF",
-#             # datetime(2022, 5, 8, tzinfo=UTC),
-#             "trade_date": "2022/05/08",
-#             "symbol": "VOO",
-#             "units": "12.00",
-#             "unitprice": "351.34",
-#             # SELL total is POSITIVE
-#             "total": "4216.08",
-#         },
-#     )
-#     return data_csv_rows
-
-
-# def create_data_csv_rows():
-#     # return create_data_csv_rows_hard_code()
-#     return create_data_csv_rows_from_file("../data/example1.csv")
 
 DEFAULT_TXN_TYPE = "BUYSTOCK"
 DEFAULT_UNIQUE_ID_TYPE = "TICKER"
@@ -112,6 +59,20 @@ class InvestmentTransaction:
         subacctsec=DEFAULT_SUB_ACCT_SEC,
         subacctfund=DEFAULT_SUB_ACCT_FUND,
     ):
+        """
+        An investment transaction model.
+
+        :param trade_date:
+        :param symbol:
+        :param units:
+        :param unitprice:
+        :param total:
+        :param fitid:
+        :param txn_type:
+        :param uniqueidtype:
+        :param subacctsec:
+        :param subacctfund:
+        """
         self.trade_date = trade_date
         self.symbol = symbol
         self.units = units
@@ -127,9 +88,19 @@ class InvestmentTransaction:
         self.subacctfund = subacctfund
 
     def generate_fitid(self):
+        """
+        Fallback way to generate a fitid if one is not provided.
+
+        :return:
+        """
         return str(uuid.uuid4())
 
     def ofx(self):
+        """
+        Generate the OFX object from the model.
+
+        :return:
+        """
         match self.txn_type:
             case "BUYSTOCK":
                 return self.create_buystock()
@@ -142,6 +113,10 @@ class InvestmentTransaction:
         return None
 
     def create_secid(self):
+        """
+        Create a SECID object which basically identify a security with symbol and type (such as TICKER)
+        :return:
+        """
         return models.SECID(
             # Unique identifier for the security. CUSIP for US FIs. A-32
             # uniqueid="123456789",
@@ -154,6 +129,11 @@ class InvestmentTransaction:
         )
 
     def create_invtran(self):
+        """
+        Create an INVTRAN OFX object which has the transaction id and a trade date.
+
+        :return:
+        """
         return models.INVTRAN(
             # fitid="23321",
             fitid=self.fitid,
@@ -265,6 +245,13 @@ class InvestmentTransaction:
 
 
 def convert_to_datetime(date_string, date_string_format="%Y/%m/%d"):
+    """
+    Convert a date string using date_string_format.
+
+    :param date_string:
+    :param date_string_format:
+    :return:
+    """
     # datetime.strptime("2020-01-01 14:00", "%Y-%m-%d %H:%M")
     d = datetime.strptime(date_string, date_string_format)
     return datetime(d.year, d.month, d.day, tzinfo=UTC)
@@ -281,6 +268,16 @@ def dict_hash(dictionary: Dict[str, Any]) -> str:
 
 
 def create_fitid(cols, row_number, fitids):
+    """
+    Create a fitid (transaction id) from the input (a row: or dictionary if column values).
+    If there is a collision (we keep track of existing values in fitids), use row_number to resolve
+    the conflict.
+
+    :param cols:
+    :param row_number:
+    :param fitids:
+    :return:
+    """
     fitid = dict_hash(cols)
     if fitid in fitids:
         fitid = fitid + "_" + row_number
@@ -290,7 +287,28 @@ def create_fitid(cols, row_number, fitids):
     return fitid
 
 
+def ensure_sign(value, must_be_positive=True):
+    """
+    Ensure that a value has correct sign.
+
+    :param value:
+    :param must_be_positive:
+    :return:
+    """
+    if must_be_positive:
+        return +abs(value)
+    else:
+        return -abs(value)
+
+
 def create_transactions(data_csv_rows, date_string_format):
+    """
+    Create a list of transactions from info in the list of data_csv_rows.
+
+    :param data_csv_rows:
+    :param date_string_format:
+    :return:
+    """
     dtstart = None
     dtend = None
 
@@ -300,15 +318,42 @@ def create_transactions(data_csv_rows, date_string_format):
     fitids = set()
     for cols in data_csv_rows:
         row_number = row_number + 1
+
+        txn_type = cols["txn_type"]
+        # Ensure sign correctness
+        match txn_type:
+            case "BUYSTOCK":
+                # BUY units is POSITIVE
+                units = ensure_sign(Decimal(cols["units"]))
+                # BUY total is NEGATIVE
+                total = ensure_sign(Decimal(cols["total"]), False)
+            case "BUYMF":
+                # BUY units is POSITIVE
+                units = ensure_sign(Decimal(cols["units"]))
+                # BUY total is NEGATIVE
+                total = ensure_sign(Decimal(cols["total"]), False)
+            case "SELLSTOCK":
+                # SELL units is NEGATIVE
+                units = ensure_sign(Decimal(cols["units"]), False)
+                # SELL total is POSITIVE
+                total = ensure_sign(Decimal(cols["total"]))
+            case "SELLMF":
+                # SELL units is NEGATIVE
+                units = ensure_sign(Decimal(cols["units"]), False)
+                # SELL total is POSITIVE
+                total = ensure_sign(Decimal(cols["total"]))
+
         txn = InvestmentTransaction(
-            txn_type=cols["txn_type"],
+            txn_type=txn_type,
             trade_date=convert_to_datetime(cols["trade_date"], date_string_format),
             symbol=cols["symbol"],
-            units=Decimal(cols["units"]),
+            # BUY units is POSITIVE
+            # SELL units is NEGATIVE
+            units=units,
             unitprice=Decimal(cols["unitprice"]),
             # BUY total is NEGATIVE
             # SELL total is POSITIVE
-            total=Decimal(cols["total"]),
+            total=total,
         )
         txn.fitid = create_fitid(cols, row_number, fitids)
 
@@ -320,11 +365,23 @@ def create_transactions(data_csv_rows, date_string_format):
         dtstart = min(dtstart, trade_date)
         dtend = max(dtend, trade_date)
 
-        if not txn.symbol in txns:
+        if txn.symbol not in txns:
             txns[txn.symbol] = txn
 
         transactions.append(txn.ofx())
 
+    secinfo = create_secinfo(txns)
+
+    return [transactions, secinfo, dtstart, dtend]
+
+
+def create_secinfo(txns):
+    """
+    Create list of secinfo (such as STOCKINFO, MFINFO ...) from the list of transactions.
+
+    :param txns:
+    :return:
+    """
     secinfo = []
     for symbol in txns:
         tnx = txns[symbol]
@@ -389,8 +446,7 @@ def create_transactions(data_csv_rows, date_string_format):
                         # assetclass="SMALLSTOCK",
                     )
                 )
-
-    return [transactions, secinfo, dtstart, dtend]
+    return secinfo
 
 
 # 2.5.1.6 Signon Response <SONRS>
@@ -434,6 +490,19 @@ def create_ofx_object(
     brokerid,
     acctid,
 ):
+    """
+    Create an OFX object (our model).
+
+    :param trnuid:
+    :param transactions:
+    :param secinfo:
+    :param dtstart:
+    :param dtend:
+    :param dtasof:
+    :param brokerid:
+    :param acctid:
+    :return:
+    """
     # Begin transaction list (at most one)
     invtranlist = models.INVTRANLIST(
         *transactions,
@@ -475,6 +544,14 @@ def create_ofx_object(
 
 
 def create_ofx_string(ofx, pretty_print):
+    """
+    Generate the OFX output from our object. If pretty_print is true, will attempt to
+    output the XML in user-friendly format.
+
+    :param ofx:
+    :param pretty_print:
+    :return:
+    """
     root = ofx.to_etree()
     message = ET.tostring(root).decode()
     header = str(make_header(version=DEFAULT_OFX_VERSION))
@@ -485,6 +562,11 @@ def create_ofx_string(ofx, pretty_print):
 
 
 def main(args):
+    """
+    Read CSV file input and generate an OFX file
+
+    :param args:
+    """
     print("# Reading input from file=%s" % args.input)
 
     # Start date for transaction data, datetime
@@ -506,14 +588,15 @@ def main(args):
     # As of date & time for the statement download, datetime
     # dtasof = datetime(2023, 1, 31, 21, 26, 5, tzinfo=UTC)
     dtasof = datetime.now(pytz.utc)
+
     # Unique identifier for the FI, A-22
     brokerid = DEFAULT_BROKER_ID
-    # Account number at FI, A-22
     if args.brokerid is None:
         brokerid = DEFAULT_BROKER_ID
     else:
         brokerid = args.brokerid
 
+    # Account number at FI, A-22
     acctid = args.acctid
 
     pretty_print = args.pretty_print
@@ -522,6 +605,7 @@ def main(args):
         trnuid, transactions, secinfo, dtstart, dtend, dtasof, brokerid, acctid
     )
     response = create_ofx_string(ofx, pretty_print)
+    # Write out the OFX output
     with open(args.output, "w") as f:
         print("# Writing output to file=%s" % args.output)
         print(response, file=f)
