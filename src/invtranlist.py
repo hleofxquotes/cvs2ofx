@@ -1,12 +1,17 @@
 import argparse
+import configparser
 import csv
+import glob
 import hashlib
 import json
+import os
+import sys
 import uuid
 import xml.dom.minidom
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Dict, Any
 
 import pytz as pytz
@@ -15,6 +20,12 @@ import pytz as pytz
 from ofxtools import models
 from ofxtools.header import make_header
 from ofxtools.utils import UTC
+
+DEFAULT_CONFIG_SECTION = "invtranlist"
+
+DEFAULT_CONFIG_FILENAME = os.environ.get(
+    "INVTRANLIST_CONFIG", default="invtranlist.ini"
+)
 
 DEFAULT_OFX_VERSION = 202
 
@@ -30,7 +41,13 @@ def create_data_csv_rows_from_file(filename):
     :param filename:
     :return:
     """
+
     data_csv_rows = []
+    if filename is None:
+        return [data_csv_rows, filename]
+
+    print("# Reading input from file=%s" % filename)
+
     with open(filename, "r") as file:
         csv_file = csv.DictReader(file)
         for row in csv_file:
@@ -567,7 +584,6 @@ def main(args):
 
     :param args:
     """
-    print("# Reading input from file=%s" % args.input)
 
     # Start date for transaction data, datetime
     # dtstart = datetime(2023, 1, 5, 22, 25, 32, tzinfo=UTC)
@@ -575,8 +591,24 @@ def main(args):
     # that no transactions are missed, datetime
     # dtend = datetime(2023, 1, 31, 21, 25, 32, tzinfo=UTC)
 
+    # If user specified a directory, then find the latest *.csv file in that directory
+    input_filename = args.input
+    if os.path.isdir(input_filename):
+        folder_path = input_filename
+        files_path = os.path.join(folder_path, "*.csv")
+        files = sorted(glob.iglob(files_path), key=os.path.getmtime, reverse=True)
+        if len(files) > 0:
+            input_filename = files[0]
+        else:
+            input_filename = None
+        # print("# Will use input file=%s" % filename)
+
+    if input_filename is None:
+        print("# ERROR, input_file is None.")
+        return
+
     [transactions, secinfo, dtstart, dtend] = create_transactions(
-        create_data_csv_rows_from_file(args.input), args.date_string_format
+        create_data_csv_rows_from_file(input_filename), args.date_string_format
     )
 
     # Client-assigned globally unique ID for this transaction, trnuid
@@ -605,13 +637,39 @@ def main(args):
         trnuid, transactions, secinfo, dtstart, dtend, dtasof, brokerid, acctid
     )
     response = create_ofx_string(ofx, pretty_print)
+    output_filename = args.output
+    write_response(output_filename, input_filename, response)
+
+
+def write_response(output_filename, input_filename, response):
+
+    # if user specified an output directory then use the input_filename as template for
+    # output filename
+    # input_filename: abc.csv
+    # output_filename: abc.ofx
+    if os.path.isdir(output_filename):
+        output_dir = os.path.abspath(output_filename)
+        prefix = Path(os.path.abspath(input_filename)).stem
+        output_filename = os.path.join(output_dir, prefix + ".ofx")
+
     # Write out the OFX output
-    with open(args.output, "w") as f:
-        print("# Writing output to file=%s" % args.output)
+    with open(output_filename, "w") as f:
+        print("# Writing output to file=%s" % output_filename)
         print(response, file=f)
 
 
 # Press the green button in the gutter to run the script.
+def config_to_args(config):
+    my_args = []
+    section = DEFAULT_CONFIG_SECTION
+    options = config.options(section)
+    for option in options:
+        my_args.append("--" + option)
+        my_args.append(config.get(section, option))
+
+    return my_args
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", "-i", required=True, help="Input file")
@@ -644,5 +702,17 @@ if __name__ == "__main__":
         action="store_true",
         help="Pretty print the output",
     )
-    args = parser.parse_args()
+
+    config = configparser.ConfigParser()
+    config_filename = DEFAULT_CONFIG_FILENAME
+    if os.access(config_filename, os.R_OK):
+        print("# Reading config file=%s" % config_filename)
+        config.read(config_filename)
+        config_args = config_to_args(config)
+        args = parser.parse_args(args=config_args)
+        print("# config_args=%s" % config_args)
+    else:
+        print("# sys.argv=%s" % sys.argv)
+        args = parser.parse_args()
+
     main(args)
