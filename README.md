@@ -55,7 +55,7 @@ SELLMF,2022/05/08,VOO,-12.00,351.34,4216.08
 
 Four transactions
 
-* Buy TSLA (stock) on 2022/08/25 (100.00 * $50) for a total -$500.00 
+* Buy TSLA (stock) on 2022/08/25 (100.00 * $50) for a total -$5000.00 
   - notes that a **buy** transaction resulted in NEGATIVE **total**
   - and a POSITIVE **units**
 * Sell AAPL (stock) on 2022/07/12 (-10.00 * $129.93) for a total 1299.30
