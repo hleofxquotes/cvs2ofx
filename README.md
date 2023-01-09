@@ -69,4 +69,18 @@ Four transactions
   - and a NEGATIVE **units**
 
 
+## Errors ##
 
+```
+(venv) hle@hle-Latitude-7290:~/PycharmProjects/ofxlist$ python src/invtranlist.py --input data/example1.csv --output example1.ofx --acctid 987654321
+Traceback (most recent call last):
+  File "/home/hle/PycharmProjects/ofxlist/src/invtranlist.py", line 17, in <module>
+    import pytz as pytz
+ModuleNotFoundError: No module named 'pytz'
+```
+
+To fix, install the required packages
+
+```
+pip install -r requirements.txt
+```
