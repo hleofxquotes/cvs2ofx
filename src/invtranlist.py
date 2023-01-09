@@ -14,12 +14,9 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Dict, Any
 
-import pytz as pytz
-
 # local imports
 from ofxtools import models
 from ofxtools.header import make_header
-from ofxtools.utils import UTC
 
 DEFAULT_CONFIG_SECTION = "invtranlist"
 
@@ -33,6 +30,7 @@ DEFAULT_BROKER_ID = "123456789"
 
 DEFAULT_CURRENCY = "USD"
 
+LOCAL_TZINFO = datetime.now().astimezone().tzinfo
 
 def create_data_csv_rows_from_file(filename):
     """
@@ -271,7 +269,9 @@ def convert_to_datetime(date_string, date_string_format="%Y/%m/%d"):
     """
     # datetime.strptime("2020-01-01 14:00", "%Y-%m-%d %H:%M")
     d = datetime.strptime(date_string, date_string_format)
-    return datetime(d.year, d.month, d.day, tzinfo=UTC)
+    # tzinfo = UTC
+    tzinfo = LOCAL_TZINFO
+    return datetime(d.year, d.month, d.day, tzinfo=tzinfo)
 
 
 def dict_hash(dictionary: Dict[str, Any]) -> str:
@@ -471,7 +471,7 @@ STATUS = models.STATUS(code=0, severity="INFO")
 SONRS = models.SONRS(
     status=STATUS,
     # dtserver=datetime(2005, 10, 29, 10, 10, 3, tzinfo=UTC),
-    dtserver=datetime.now(pytz.utc),
+    dtserver=datetime.now(LOCAL_TZINFO),
     language="ENG",
     # dtprofup=datetime(2004, 10, 29, 10, 10, 3, tzinfo=UTC),
     # dtacctup=datetime(2004, 10, 29, 10, 10, 3, tzinfo=UTC),
@@ -619,7 +619,7 @@ def main(args):
 
     # As of date & time for the statement download, datetime
     # dtasof = datetime(2023, 1, 31, 21, 26, 5, tzinfo=UTC)
-    dtasof = datetime.now(pytz.utc)
+    dtasof = datetime.now(LOCAL_TZINFO)
 
     # Unique identifier for the FI, A-22
     brokerid = DEFAULT_BROKER_ID
@@ -665,7 +665,9 @@ def config_to_args(config):
     options = config.options(section)
     for option in options:
         my_args.append("--" + option)
-        my_args.append(config.get(section, option))
+        value = config.get(section, option)
+        if value and len(value) > 0:
+            my_args.append(value)
 
     return my_args
 
