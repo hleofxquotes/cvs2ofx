@@ -1,7 +1,7 @@
-import re
-from io import StringIO
-import xml.dom.minidom
 import argparse
+import re
+import xml.dom.minidom
+from io import StringIO
 
 
 def cleanup(filename):

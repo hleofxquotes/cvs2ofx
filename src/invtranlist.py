@@ -18,6 +18,7 @@ from typing import Dict, Any
 from ofxtools import models
 from ofxtools.header import make_header
 
+
 DEFAULT_CONFIG_SECTION = "invtranlist"
 
 DEFAULT_CONFIG_FILENAME = os.environ.get(
@@ -31,6 +32,7 @@ DEFAULT_BROKER_ID = "123456789"
 DEFAULT_CURRENCY = "USD"
 
 LOCAL_TZINFO = datetime.now().astimezone().tzinfo
+
 
 def create_data_csv_rows_from_file(filename):
     """
@@ -73,6 +75,7 @@ class InvestmentTransaction:
         uniqueidtype=DEFAULT_UNIQUE_ID_TYPE,
         subacctsec=DEFAULT_SUB_ACCT_SEC,
         subacctfund=DEFAULT_SUB_ACCT_FUND,
+        memo="",
     ):
         """
         An investment transaction model.
@@ -87,8 +90,10 @@ class InvestmentTransaction:
         :param uniqueidtype:
         :param subacctsec:
         :param subacctfund:
+        :param memo:
         """
         self.trade_date = trade_date
+        self.memo = memo
         self.symbol = symbol
         self.units = units
         self.unitprice = unitprice
@@ -155,6 +160,7 @@ class InvestmentTransaction:
             # dttrade=datetime(2005, 8, 25, tzinfo=UTC),
             dttrade=self.trade_date,
             # dtsettle=datetime(2005, 8, 28, tzinfo=UTC),
+            memo=self.memo,
         )
 
     def create_buystock(self):
@@ -328,6 +334,7 @@ def create_transactions(data_csv_rows, date_string_format):
     """
     dtstart = None
     dtend = None
+    memo = None
 
     row_number = 0
     txns = {}
@@ -360,10 +367,18 @@ def create_transactions(data_csv_rows, date_string_format):
                 # SELL total is POSITIVE
                 total = ensure_sign(Decimal(cols["total"]))
 
+        symbol = cols["symbol"]
+        if "memo" in cols:
+            memo = cols["memo"]
+            if memo is None or len(memo) <= 0:
+                memo = symbol
+        else:
+            memo = symbol
+
         txn = InvestmentTransaction(
             txn_type=txn_type,
             trade_date=convert_to_datetime(cols["trade_date"], date_string_format),
-            symbol=cols["symbol"],
+            symbol=symbol,
             # BUY units is POSITIVE
             # SELL units is NEGATIVE
             units=units,
@@ -371,6 +386,7 @@ def create_transactions(data_csv_rows, date_string_format):
             # BUY total is NEGATIVE
             # SELL total is POSITIVE
             total=total,
+            memo=memo,
         )
         txn.fitid = create_fitid(cols, row_number, fitids)
 
