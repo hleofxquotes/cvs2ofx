@@ -10,7 +10,21 @@
             </Attribute>
           </value>
         </entry>
-        <entry key="/data/example1_no__memo.csv">
+        <entry key="/data/fidelity_mapper.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/out.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/private/History_for_Account_#########.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />

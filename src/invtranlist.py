@@ -371,9 +371,9 @@ def create_transactions(data_csv_rows, date_string_format):
         if "memo" in cols:
             memo = cols["memo"]
             if memo is None or len(memo) <= 0:
-                memo = symbol
+                memo = ""
         else:
-            memo = symbol
+            memo = ""
 
         txn = InvestmentTransaction(
             txn_type=txn_type,
@@ -675,15 +675,18 @@ def write_response(output_filename, input_filename, response):
 
 
 # Press the green button in the gutter to run the script.
-def config_to_args(config):
+def config_to_args(config, section):
     my_args = []
-    section = DEFAULT_CONFIG_SECTION
-    options = config.options(section)
-    for option in options:
-        my_args.append("--" + option)
-        value = config.get(section, option)
-        if value and len(value) > 0:
-            my_args.append(value)
+    try:
+        # section = DEFAULT_CONFIG_SECTION
+        options = config.options(section)
+        for option in options:
+            my_args.append("--" + option)
+            value = config.get(section, option)
+            if value and len(value) > 0:
+                my_args.append(value)
+    except configparser.NoSectionError:
+        pass
 
     return my_args
 
@@ -726,9 +729,11 @@ if __name__ == "__main__":
     if os.access(config_filename, os.R_OK):
         print("# Reading config file=%s" % config_filename)
         config.read(config_filename)
-        config_args = config_to_args(config)
-        args = parser.parse_args(args=config_args)
+        config_args = config_to_args(config, DEFAULT_CONFIG_SECTION)
+        print("# sys.argv=%s" % sys.argv[1:])
+        config_args = config_args + sys.argv[1:]
         print("# config_args=%s" % config_args)
+        args = parser.parse_args(args=config_args)
     else:
         print("# sys.argv=%s" % sys.argv)
         args = parser.parse_args()
