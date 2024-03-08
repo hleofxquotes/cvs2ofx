@@ -49,14 +49,16 @@ def create_data_csv_rows_from_file(filename):
     print("# Reading input from file=%s" % filename)
 
     with open(filename, "r") as file:
-        csv_file = csv.DictReader(file)
-        for row in csv_file:
+        dict_reader = csv.DictReader(file)
+        rows = [{k.strip(): v.strip() for k, v in row.items()} for row in dict_reader]
+        for row in rows:
             # print(dict(row))
             data_csv_rows.append(dict(row))
     return data_csv_rows
 
 
 DEFAULT_TXN_TYPE = "BUYSTOCK"
+DEFAULT_TXN_SYMBOL_TYPE = "STOCK"
 DEFAULT_UNIQUE_ID_TYPE = "TICKER"
 DEFAULT_SUB_ACCT_SEC = "CASH"
 DEFAULT_SUB_ACCT_FUND = "CASH"
@@ -72,6 +74,7 @@ class InvestmentTransaction:
         total,
         fitid=None,
         txn_type=DEFAULT_TXN_TYPE,
+        symbol_type=DEFAULT_TXN_SYMBOL_TYPE,
         uniqueidtype=DEFAULT_UNIQUE_ID_TYPE,
         subacctsec=DEFAULT_SUB_ACCT_SEC,
         subacctfund=DEFAULT_SUB_ACCT_FUND,
@@ -103,6 +106,8 @@ class InvestmentTransaction:
         self.fitid = fitid
         # BUYSTOCK, SELLSTOCK, BUYMF, SELLMF
         self.txn_type = txn_type
+        # optional: STOCK, MF
+        self.symbol_type = symbol_type
         self.uniqueidtype = uniqueidtype
         self.subacctsec = subacctsec
         self.subacctfund = subacctfund
@@ -130,6 +135,11 @@ class InvestmentTransaction:
                 return self.create_buymf()
             case "SELLMF":
                 return self.create_sellmf()
+            case "REINVEST":
+                return self.create_reinvest()
+            case "INCOME":
+                return self.create_income()
+
         return None
 
     def create_secid(self):
@@ -236,6 +246,64 @@ class InvestmentTransaction:
             buytype="BUY",
         )
 
+    def create_income(self):
+        #                     <INCOME>
+        #                         <INVTRAN>
+        #                             <FITID>154991799</FITID>
+        #                             <DTTRADE>20221228160000.000[-5:EST]</DTTRADE>
+        #                             <DTSETTLE>20221228160000.000[-5:EST]</DTSETTLE>
+        #                             <MEMO>DIVIDEND PAYMENTDIVIDEND PAYMENT</MEMO>
+        #                         </INVTRAN>
+        #                         <SECID>
+        #                             <UNIQUEID>922908769</UNIQUEID>
+        #                             <UNIQUEIDTYPE>CUSIP</UNIQUEIDTYPE>
+        #                         </SECID>
+        #                         <INCOMETYPE>DIV</INCOMETYPE>
+        #                         <TOTAL>527.66</TOTAL>
+        #                         <SUBACCTSEC>CASH</SUBACCTSEC>
+        #                         <SUBACCTFUND>CASH</SUBACCTFUND>
+        #                     </INCOME>
+        return models.INCOME(
+            invtran=self.create_invtran(),
+            secid=self.create_secid(),
+            incometype="DIV",
+            total=self.total,
+            # subacctsec="CASH",
+            subacctsec=self.subacctsec,
+            # subacctfund="CASH",
+            subacctfund=self.subacctfund,
+        )
+
+    def create_reinvest(self):
+        #                     <REINVEST>
+        #                         <INVTRAN>
+        #                             <FITID>22631701</FITID>
+        #                             <DTTRADE>20221230160000.000[-5:EST]</DTTRADE>
+        #                             <DTSETTLE>20221230160000.000[-5:EST]</DTSETTLE>
+        #                             <MEMO>DIVIDEND REINVESTMENTDIVIDEND REINVESTMENT</MEMO>
+        #                         </INVTRAN>
+        #                         <SECID>
+        #                             <UNIQUEID>921937603</UNIQUEID>
+        #                             <UNIQUEIDTYPE>CUSIP</UNIQUEIDTYPE>
+        #                         </SECID>
+        #                         <INCOMETYPE>DIV</INCOMETYPE>
+        #                         <TOTAL>-100.18</TOTAL>
+        #                         <SUBACCTSEC>CASH</SUBACCTSEC>
+        #                         <UNITS>10.568</UNITS>
+        #                         <UNITPRICE>9.48</UNITPRICE>
+        #                     </REINVEST>
+        return models.REINVEST(
+            invtran=self.create_invtran(),
+            secid=self.create_secid(),
+            incometype="DIV",
+            total=self.total,
+            # subacctsec="CASH",
+            subacctsec=self.subacctsec,
+            units=self.units,
+            # unitprice=Decimal("50.00"),
+            unitprice=self.unitprice,
+        )
+
     def create_sellmf(self):
         return models.SELLMF(
             invsell=models.INVSELL(
@@ -324,6 +392,21 @@ def ensure_sign(value, must_be_positive=True):
         return -abs(value)
 
 
+def str_is_empty(a_str):
+    if not bool(a_str):
+        return True
+
+    return not bool(a_str.strip())
+
+
+def to_decimal(val):
+    # empty
+    if str_is_empty(val):
+        return None
+
+    return Decimal(val)
+
+
 def create_transactions(data_csv_rows, date_string_format):
     """
     Create a list of transactions from info in the list of data_csv_rows.
@@ -344,28 +427,39 @@ def create_transactions(data_csv_rows, date_string_format):
         row_number = row_number + 1
 
         txn_type = cols["txn_type"]
+        symbol_type = DEFAULT_TXN_SYMBOL_TYPE
+        if "symbol_type" in cols:
+            symbol_type = cols["symbol_type"]
         # Ensure sign correctness
+        units = 0.00
+        total = 0.00
         match txn_type:
             case "BUYSTOCK":
                 # BUY units is POSITIVE
-                units = ensure_sign(Decimal(cols["units"]))
+                units = ensure_sign(to_decimal(cols["units"]))
                 # BUY total is NEGATIVE
-                total = ensure_sign(Decimal(cols["total"]), False)
+                total = ensure_sign(to_decimal(cols["total"]), False)
             case "BUYMF":
                 # BUY units is POSITIVE
-                units = ensure_sign(Decimal(cols["units"]))
+                units = ensure_sign(to_decimal(cols["units"]))
                 # BUY total is NEGATIVE
-                total = ensure_sign(Decimal(cols["total"]), False)
+                total = ensure_sign(to_decimal(cols["total"]), False)
             case "SELLSTOCK":
                 # SELL units is NEGATIVE
-                units = ensure_sign(Decimal(cols["units"]), False)
+                units = ensure_sign(to_decimal(cols["units"]), False)
                 # SELL total is POSITIVE
-                total = ensure_sign(Decimal(cols["total"]))
+                total = ensure_sign(to_decimal(cols["total"]))
             case "SELLMF":
                 # SELL units is NEGATIVE
-                units = ensure_sign(Decimal(cols["units"]), False)
+                units = ensure_sign(to_decimal(cols["units"]), False)
                 # SELL total is POSITIVE
-                total = ensure_sign(Decimal(cols["total"]))
+                total = ensure_sign(to_decimal(cols["total"]))
+            case "REINVEST":
+                units = to_decimal(cols["units"])
+                total = to_decimal(cols["total"])
+            case "INCOME":
+                units = to_decimal(cols["units"])
+                total = to_decimal(cols["total"])
 
         symbol = cols["symbol"]
         if "memo" in cols:
@@ -375,14 +469,16 @@ def create_transactions(data_csv_rows, date_string_format):
         else:
             memo = ""
 
+        unitprice = to_decimal(cols["unitprice"])
         txn = InvestmentTransaction(
             txn_type=txn_type,
+            symbol_type=symbol_type,
             trade_date=convert_to_datetime(cols["trade_date"], date_string_format),
             symbol=symbol,
             # BUY units is POSITIVE
             # SELL units is NEGATIVE
             units=units,
-            unitprice=Decimal(cols["unitprice"]),
+            unitprice=unitprice,
             # BUY total is NEGATIVE
             # SELL total is POSITIVE
             total=total,
@@ -417,69 +513,79 @@ def create_secinfo(txns):
     """
     secinfo = []
     for symbol in txns:
-        tnx = txns[symbol]
-        match tnx.txn_type:
+        txn = txns[symbol]
+        match txn.txn_type:
             case "BUYSTOCK":
-                secinfo.append(
-                    models.STOCKINFO(
-                        secinfo=models.SECINFO(
-                            secid=models.SECID(
-                                uniqueid=tnx.symbol, uniqueidtype=DEFAULT_UNIQUE_ID_TYPE
-                            ),
-                            secname=tnx.symbol,
-                            ticker=tnx.symbol,
-                            # fiid="1024",
-                        ),
-                        # yld=Decimal("10"),
-                        # assetclass="SMALLSTOCK",
-                    )
-                )
+                secinfo.append(create_STOCKINFO(txn))
             case "SELLSTOCK":
-                secinfo.append(
-                    models.STOCKINFO(
-                        secinfo=models.SECINFO(
-                            secid=models.SECID(
-                                uniqueid=tnx.symbol, uniqueidtype=DEFAULT_UNIQUE_ID_TYPE
-                            ),
-                            secname=tnx.symbol,
-                            ticker=tnx.symbol,
-                            # fiid="1024",
-                        ),
-                        # yld=Decimal("10"),
-                        # assetclass="SMALLSTOCK",
-                    )
-                )
+                secinfo.append(create_STOCKINFO(txn))
             case "BUYMF":
-                secinfo.append(
-                    models.MFINFO(
-                        secinfo=models.SECINFO(
-                            secid=models.SECID(
-                                uniqueid=tnx.symbol, uniqueidtype=DEFAULT_UNIQUE_ID_TYPE
-                            ),
-                            secname=tnx.symbol,
-                            ticker=tnx.symbol,
-                            # fiid="1024",
-                        ),
-                        # yld=Decimal("10"),
-                        # assetclass="SMALLSTOCK",
-                    )
-                )
+                secinfo.append(create_MFINFO(txn))
             case "SELLMF":
-                secinfo.append(
-                    models.MFINFO(
-                        secinfo=models.SECINFO(
-                            secid=models.SECID(
-                                uniqueid=tnx.symbol, uniqueidtype=DEFAULT_UNIQUE_ID_TYPE
-                            ),
-                            secname=tnx.symbol,
-                            ticker=tnx.symbol,
-                            # fiid="1024",
-                        ),
-                        # yld=Decimal("10"),
-                        # assetclass="SMALLSTOCK",
-                    )
-                )
+                secinfo.append(create_MFINFO(txn))
+            case "REINVEST":
+                secinfo.append(create_secinfo_REINVEST(txn))
+            case "INCOME":
+                secinfo.append(create_secinfo_INCOME(txn))
+
     return secinfo
+
+
+def is_MFINFO(txn):
+    if str_is_empty(txn.symbol_type):
+        return False
+    else:
+        return txn.symbol_type == "MF"
+
+
+def is_STOCKINFO(txn):
+    if str_is_empty(txn.symbol_type):
+        return False
+    else:
+        return txn.symbol_type == "STOCK"
+
+
+def create_secinfo_REINVEST(txn):
+    if is_MFINFO(txn):
+        return create_MFINFO(txn)
+    elif is_STOCKINFO(txn):
+        return create_STOCKINFO(txn)
+    else:
+        return None
+
+
+def create_secinfo_INCOME(txn):
+    if is_MFINFO(txn):
+        return create_MFINFO(txn)
+    elif is_STOCKINFO(txn):
+        return create_STOCKINFO(txn)
+    else:
+        return None
+
+
+def create_MFINFO(txn):
+    return models.MFINFO(
+        secinfo=create_SECINFO(txn),
+        # yld=Decimal("10"),
+        # assetclass="SMALLSTOCK",
+    )
+
+
+def create_STOCKINFO(txn):
+    return models.STOCKINFO(
+        secinfo=create_SECINFO(txn),
+        # yld=Decimal("10"),
+        # assetclass="SMALLSTOCK",
+    )
+
+
+def create_SECINFO(txn):
+    return models.SECINFO(
+        secid=models.SECID(uniqueid=txn.symbol, uniqueidtype=DEFAULT_UNIQUE_ID_TYPE),
+        secname=txn.symbol,
+        ticker=txn.symbol,
+        # fiid="1024",
+    )
 
 
 # 2.5.1.6 Signon Response <SONRS>
@@ -648,6 +754,8 @@ def main(args):
     acctid = args.acctid
 
     pretty_print = args.pretty_print
+
+    print(secinfo)
 
     ofx = create_ofx_object(
         trnuid, transactions, secinfo, dtstart, dtend, dtasof, brokerid, acctid

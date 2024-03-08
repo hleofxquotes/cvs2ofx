@@ -6,6 +6,8 @@ import sys
 
 from invtranlist import config_to_args
 
+DEFAULT_MAPPER_SYMBOL_TYPE = "UNKNOWN"
+
 DEFAULT_CONFIG_SECTION = "read_fidelity_csv"
 
 DEFAULT_CONFIG_FILENAME = os.environ.get(
@@ -14,23 +16,44 @@ DEFAULT_CONFIG_FILENAME = os.environ.get(
 
 
 class FidelityMapper:
-    def __init__(self, filename):
+    def __init__(self, filename=None):
         self.filename = filename
-        self.parse(self.filename)
         self.rows = []
+        self.parse(self.filename)
 
     def parse(self, filename):
-        rows_dict = []
-        with open(filename, mode="r") as file:
-            dict_reader = csv.DictReader(file)
-            self.rows = list(dict_reader)
+        print("# Parsing mapper filename=%s" % (filename))
 
-    def get_type(self, symbol):
+        if filename:
+            with open(filename, mode="r") as file:
+                dict_reader = csv.DictReader(file)
+                rows = [
+                    {k.strip(): v.strip() for k, v in row.items()}
+                    for row in dict_reader
+                ]
+                rows_dict = []
+                for row in rows:
+                    rows_dict.append(dict(row))
+                self.rows = rows_dict
+        else:
+            self.rows = []
+
+        # print("parse - self.rows=%s" % (self.rows))
+
+    def get_symbol_type(self, symbol):
+        # print("111 self.rows=%s" % (self.rows))
+
         for row in self.rows:
-            if symbol in row["symbol"]:
+            # print(
+            #     "222 symbol=%s, row=%s, found=%s"
+            #     % (symbol, row, (symbol == row["symbol"]))
+            # )
+            if symbol == row["symbol"]:
+                # print("333 type=%s" % (row["type"]))
                 return row["type"]
 
-        return "FUND"
+        # print("444 type=%s" % (DEFAULT_MAPPER_SYMBOL_TYPE))
+        return DEFAULT_MAPPER_SYMBOL_TYPE
 
 
 class FidelityCsv:
@@ -46,13 +69,19 @@ class FidelityCsv:
         value = row["Action"]
         description = row["Security Description"]
         security = row["Security Type"]
-        type = self.mapper.get_type(security)
+        sec_type = self.mapper.get_symbol_type(security)
 
         if "BOUGHT" in value:
-            if type in "FUND":
+            if sec_type in "MF":
                 return "BUYFUND"
             else:
                 return "BUYSTOCK"
+
+        if "SOLD" in value:
+            if sec_type in "MF":
+                return "SELLFUND"
+            else:
+                return "SELLSTOCK"
 
         if "REINVESTMENT" in value:
             return "REINVEST"
@@ -93,6 +122,8 @@ class FidelityCsv:
                         for i in range(0, cols):
                             key = headers[i]
                             value = row[i]
+                            if value is not None:
+                                value = value.strip()
                             # print(key, value)
                             row_dict[key] = value
                         rows_dict.append(row_dict)
@@ -101,13 +132,15 @@ class FidelityCsv:
 
 def main(args):
     fidelity_mapper = FidelityMapper(args.mapper)
+    print("# mapper.rows.len=%s" % (len(fidelity_mapper.rows)))
+
     fidelity_csv = FidelityCsv(args.input, fidelity_mapper, args.header_lineno)
 
     write_output_file(fidelity_csv, args.output)
 
 
 def write_output_file(fidelity_csv, filename):
-    # txn_type,trade_date,symbol,units,unitprice,total,memo
+    # txn_type,trade_date,symbol,units,unitprice,total,memo,symbol_type
     headers = [
         "txn_type",
         "trade_date",
@@ -116,6 +149,7 @@ def write_output_file(fidelity_csv, filename):
         "unitprice",
         "total",
         "memo",
+        "symbol_type",
     ]
 
     print("# Writing to filename=%s" % (filename))
@@ -136,7 +170,17 @@ def write_output_file(fidelity_csv, filename):
             unitprice = row["Price ($)"]
             total = row["Amount ($)"]
             memo = row["Action"]
-            new_row = [txn_type, trade_date, symbol, units, unitprice, total, memo]
+            symbol_type = fidelity_csv.mapper.get_symbol_type(symbol)
+            new_row = [
+                txn_type,
+                trade_date,
+                symbol,
+                units,
+                unitprice,
+                total,
+                memo,
+                symbol_type,
+            ]
             csvwriter.writerow(new_row)
 
 
@@ -144,7 +188,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", "-i", required=True, help="Input file")
     parser.add_argument("--output", "-o", required=True, help="Output file")
-    parser.add_argument("--mapper", "-m", required=True, help="Mapper file")
+    parser.add_argument("--mapper", "-m", required=False, help="Mapper file")
     parser.add_argument(
         "--header_lineno",
         "-l",

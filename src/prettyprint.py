@@ -1,7 +1,11 @@
 import argparse
+import json
+import pprint
 import re
 import xml.dom.minidom
 from io import StringIO
+
+import xmltodict
 
 
 def cleanup(filename):
@@ -45,13 +49,22 @@ def cleanup(filename):
     return [header, xml_body]
 
 
-def prettyprint(xml_body):
-    xml_body.seek(0)
-    xml_string = xml_body.read()
+def prettyprint(xml_string):
     return xml.dom.minidom.parseString(xml_string).toprettyxml()
 
 
 # Press the green button in the gutter to run the script.
+def tojson(xml_string):
+    doc = xmltodict.parse(xml_string);
+    json_data = json.dumps(doc, indent=4)
+    return json_data
+
+
+def tocsv(xml_string):
+    doc = xmltodict.parse(xml_string);
+    return ""
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, required=True)
@@ -60,6 +73,17 @@ if __name__ == "__main__":
 
     [header, xml_body] = cleanup(args.input)
 
-    pretty_xml = prettyprint(xml_body)
+    xml_body.seek(0)
+    xml_string = xml_body.read()
 
-    print(pretty_xml, file=open(args.output, "w"))
+    output = None
+    if args.output.endswith(".xml"):
+        output = prettyprint(xml_string)
+    elif args.output.endswith(".json"):
+        output = tojson(xml_string)
+    elif args.output.endswith(".csv"):
+        output = tocsv(xml_string)
+    else:
+        output = prettyprint(xml_string)
+
+    print(output, file=open(args.output, "w"))
